@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+
+
+import os
+import time
+import urllib.request
+from total_connect_comfort import client
+
+
+influx_server = os.environ.get('server')
+influx_database = os.environ.get('database')
+username = os.environ.get('username')
+password = os.environ.get('password')
+c = client.Client(username, password)
+data = c.locations()
+
+
+devices = []
+
+timestamp = time.time()
+
+
+for location in data:
+	for device in location['Devices']:
+		info = {
+			'id': str(device['DeviceID']),
+			'label': device['Name'],
+			'temp': device['ThermostatData']['IndoorTemperature'],
+			'setpoint_heat': device['ThermostatData']['ScheduleHeatSp'],
+			'setpoint_cool': device['ThermostatData']['ScheduleCoolSp'],
+			'units': 'F' if device['ThermostatData']['DisplayUnits']==1 else 'C'
+		}
+		devices.append(info)
+
+lines = []
+for device in devices:
+	lines.append('total_connect_comfort,location=%s measurement=%s,heat_setpoint=%s,cool_setpoint=%s %i000000000' % (
+		device['label'].replace(' ', '\\ '), device['temp'], device['setpoint_heat'], device['setpoint_cool'], timestamp)
+	)
+
+url = 'http://%s:8086/write?db=%s' % (influx_server, influx_database)
+urllib.request.urlopen(url, data='\n'.join(lines).encode('utf-8'))
